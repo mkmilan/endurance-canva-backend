@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:endurance-canvas:lesson:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "catalogVersion", "lessonType", "title", "audience", "blocks", "visual", "presentation", "sourceIds", "assumptions"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "catalogVersion": { "const": 1 },
+    "lessonType": { "const": "three-zone-explainer" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "audience": { "enum": ["beginner", "intermediate"] },
+    "blocks": {
+      "type": "array", "minItems": 1, "maxItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["type", "text", "claimIds"],
+        "properties": {
+          "type": { "const": "paragraph" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 1200 },
+          "claimIds": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "enum": ["display-convention", "fictional-inputs", "three-zone-framework"] } }
+        }
+      }
+    },
+    "visual": {
+      "type": "object", "additionalProperties": false,
+      "required": ["component", "unit", "domain", "lt1", "lt2", "defaultPower"],
+      "properties": {
+        "component": { "const": "three-zone-power" },
+        "unit": { "const": "W" },
+        "domain": {
+          "type": "object", "additionalProperties": false, "required": ["min", "max"],
+          "properties": { "min": { "const": 0 }, "max": { "type": "number", "minimum": 100, "maximum": 1000 } }
+        },
+        "lt1": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1000 },
+        "lt2": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1000 },
+        "defaultPower": { "type": "number", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "presentation": {
+      "type": "object", "additionalProperties": false, "required": ["theme", "accent"],
+      "properties": { "theme": { "const": "light" }, "accent": { "enum": ["teal", "blue", "amber"] } }
+    },
+    "sourceIds": { "type": "array", "uniqueItems": true, "maxItems": 1, "items": { "enum": ["seiler-kjerland-2006"] } },
+    "assumptions": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "type": "string", "minLength": 1, "maxLength": 500 } }
+  }
+}

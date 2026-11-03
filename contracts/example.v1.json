@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": 1,
+  "lessonType": "three-zone-explainer",
+  "title": "A clearer picture of training intensity",
+  "audience": "beginner",
+  "blocks": [
+    {
+      "type": "paragraph",
+      "text": "Two thresholds divide this fictional cyclist's power into three zones. Below LT1 is Zone 1; between LT1 and LT2 is Zone 2; above LT2 is Zone 3. Move the power slider to see where the example falls.",
+      "claimIds": ["display-convention", "fictional-inputs"]
+    },
+    {
+      "type": "paragraph",
+      "text": "The numbers are teaching inputs, not a test result. Changing a threshold changes this example; it does not show how a real athlete adapts.",
+      "claimIds": ["fictional-inputs"]
+    }
+  ],
+  "visual": {
+    "component": "three-zone-power",
+    "unit": "W",
+    "domain": { "min": 0, "max": 350 },
+    "lt1": 180,
+    "lt2": 240,
+    "defaultPower": 200
+  },
+  "presentation": { "theme": "light", "accent": "teal" },
+  "sourceIds": ["seiler-kjerland-2006"],
+  "assumptions": [
+    "All threshold values in this lesson are fictional teaching inputs.",
+    "The display includes exact thresholds in Zone 2 and labels them separately; this is a UI convention.",
+    "The cited study used ventilatory thresholds; it does not validate these example lactate-threshold values."
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "catalogVersion": 1,
+  "schemaVersion": 1,
+  "lessonTypes": [
+    {
+      "id": "three-zone-explainer",
+      "name": "Three training zones",
+      "description": "Explore supplied, fictional LT1 and LT2 boundaries using cycling power.",
+      "component": "three-zone-power",
+      "supportedRequests": ["Explain three zones", "Make it simpler", "Add more detail", "Show an example above LT2", "Use a blue accent"]
+    }
+  ],
+  "sources": [
+    {
+      "id": "seiler-kjerland-2006",
+      "title": "Quantifying training intensity distribution in elite endurance athletes: is there evidence for an optimal distribution?",
+      "authors": "Stephen Seiler and Glenn Øvrevik Kjerland",
+      "year": 2006,
+      "url": "https://pubmed.ncbi.nlm.nih.gov/16430681/",
+      "doi": "10.1111/j.1600-0838.2004.00418.x",
+      "supports": "A three-zone framework delineated by two ventilatory thresholds in the studied athletes.",
+      "limitations": "This study used ventilatory thresholds. It does not validate this example's LT1/LT2 wattages, a lactate-threshold algorithm, or equivalence between ventilatory and lactate thresholds.",
+      "reviewStatus": "limited-claim-reviewed"
+    }
+  ],
+  "claims": [
+    {
+      "id": "display-convention",
+      "kind": "application-rule",
+      "text": "The display assigns Z1 below the first supplied boundary, Z2 from the first through the second boundary, and Z3 above the second boundary. Exact boundaries are labelled separately.",
+      "sourceIds": []
+    },
+    {
+      "id": "fictional-inputs",
+      "kind": "example-assumption",
+      "text": "All power thresholds are fictional teaching inputs. Editing them changes the example and does not estimate an athlete's thresholds or predict adaptation.",
+      "sourceIds": []
+    },
+    {
+      "id": "three-zone-framework",
+      "kind": "research",
+      "text": "Seiler and Kjerland used two ventilatory thresholds to delineate three intensity zones in their study of endurance athletes.",
+      "sourceIds": ["seiler-kjerland-2006"]
+    }
+  ],
+  "notice": "The current lesson uses fictional power boundaries. Source notes describe the scope of the research; every authored lesson remains a draft until the creator reviews it."
+}
