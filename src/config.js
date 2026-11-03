@@ -11,7 +11,16 @@ export function loadConfig(env = process.env) {
   if (!['demo', 'live'].includes(mode)) throw new Error('AI_MODE must be demo or live.');
   const serviceToken = env.BACKEND_SERVICE_TOKEN || '';
   if (production && serviceToken.length < 32) throw new Error('Production requires a BACKEND_SERVICE_TOKEN of at least 32 characters.');
-  if (mode === 'live' && (!env.AI_MODEL_ID || !env.AI_GATEWAY_API_KEY)) throw new Error('Live mode requires AI_MODEL_ID and AI_GATEWAY_API_KEY.');
+  const studioOrigin = env.STUDIO_ORIGIN || '';
+  if (studioOrigin) {
+    let url;
+    try { url = new URL(studioOrigin); } catch { throw new Error('STUDIO_ORIGIN must be an absolute origin.'); }
+    if (url.origin !== studioOrigin || !['http:', 'https:'].includes(url.protocol) || (production && url.protocol !== 'https:')) throw new Error('STUDIO_ORIGIN must be an exact HTTPS origin in production.');
+  }
+  const authSecret = env.AUTH_SECRET || '';
+  const mongoUri = env.MONGODB_URI || '';
+  const setupTokenHash = env.OWNER_SETUP_TOKEN_HASH || '';
+  const setupExpiresAt = Date.parse(env.OWNER_SETUP_EXPIRES_AT || '');
   return {
     production, mode, serviceToken,
     port: integer(env.PORT, 4000, 1, 65535, 'PORT'),
@@ -21,6 +30,14 @@ export function loadConfig(env = process.env) {
     maxConcurrent: integer(env.GENERATION_MAX_CONCURRENT, 2, 1, 5, 'GENERATION_MAX_CONCURRENT'),
     maxOutputTokens: integer(env.AI_MAX_OUTPUT_TOKENS, 2500, 500, 6000, 'AI_MAX_OUTPUT_TOKENS'),
     modelId: env.AI_MODEL_ID || '',
-    gatewayKey: env.AI_GATEWAY_API_KEY || ''
+    gatewayKey: env.AI_GATEWAY_API_KEY || '',
+    studioOrigin, authSecret, mongoUri,
+    mongoDatabase: env.MONGODB_DATABASE || 'endurance_canvas',
+    mongoTimeoutMs: integer(env.MONGODB_TIMEOUT_MS, 8000, 100, 30000, 'MONGODB_TIMEOUT_MS'),
+    authConfigured: Boolean(mongoUri && authSecret.length >= 32 && studioOrigin),
+    setupTokenHash: /^[a-f0-9]{64}$/i.test(setupTokenHash) ? setupTokenHash.toLowerCase() : '',
+    setupExpiresAt: Number.isFinite(setupExpiresAt) ? setupExpiresAt : 0,
+    liveDailyLimit: integer(env.AI_DAILY_REQUEST_LIMIT, 20, 1, 1000, 'AI_DAILY_REQUEST_LIMIT'),
+    liveMonthlyLimit: integer(env.AI_MONTHLY_REQUEST_LIMIT, 200, 1, 10000, 'AI_MONTHLY_REQUEST_LIMIT')
   };
 }
