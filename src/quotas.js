@@ -32,20 +32,21 @@ export function generationInputHash(input) {
 export function createQuotaStore({ db, client, config, clock = Date.now }) {
   const counters = db.collection('generationQuota');
   const attempts = db.collection('generationAttempts');
+  const operationOptions = { maxTimeMS: config.mongoTimeoutMs };
   const limitFor = (period) => period === 'daily' ? config.liveDailyLimit : config.liveMonthlyLimit;
   const duplicate = (existing, inputHash) => new CreatorError(409,
     existing.inputHash === inputHash ? 'DUPLICATE_REQUEST' : 'REQUEST_ID_CONFLICT',
     'This request identifier has already been used. No second AI request was made.');
 
   async function initialize() {
-    await attempts.createIndex({ ownerId: 1, requestId: 1 }, { name: 'owner_request_unique', unique: true });
-    await counters.createIndex({ ownerId: 1, period: 1 });
+    await attempts.createIndex({ ownerId: 1, requestId: 1 }, { name: 'owner_request_unique', unique: true, ...operationOptions });
+    await counters.createIndex({ ownerId: 1, period: 1 }, operationOptions);
   }
 
   async function limits(ownerId) {
     const periods = quotaPeriods(clock());
     const entries = await Promise.all(Object.entries(periods).map(async ([period, value]) => {
-      const counter = await counters.findOne({ _id: `${ownerId}:${period}:${value.key}` });
+      const counter = await counters.findOne({ _id: `${ownerId}:${period}:${value.key}` }, operationOptions);
       return [period, { used: counter?.used || 0, limit: limitFor(period), resetsAt: value.resetsAt.toISOString() }];
     }));
     return Object.fromEntries(entries);
@@ -62,7 +63,7 @@ export function createQuotaStore({ db, client, config, clock = Date.now }) {
       try {
         await counters.updateOne({ _id: `${ownerId}:${period}:${value.key}` }, { $setOnInsert: {
           ownerId, period, periodKey: value.key, resetsAt: value.resetsAt, used: 0,
-        } }, { upsert: true });
+        } }, { upsert: true, ...operationOptions });
       } catch (error) {
         if (error.code !== 11000) throw error;
       }
@@ -70,23 +71,23 @@ export function createQuotaStore({ db, client, config, clock = Date.now }) {
     const session = client.startSession();
     try {
       await session.withTransaction(async () => {
-        const existing = await attempts.findOne({ ownerId, requestId }, { session });
+        const existing = await attempts.findOne({ ownerId, requestId }, { session, ...operationOptions });
         if (existing) throw duplicate(existing, inputHash);
         for (const [period, value] of Object.entries(periods)) {
           const _id = `${ownerId}:${period}:${value.key}`;
-          const counter = await counters.findOne({ _id }, { session });
+          const counter = await counters.findOne({ _id }, { session, ...operationOptions });
           if ((counter?.used || 0) >= limitFor(period)) throw new CreatorError(429, 'QUOTA_EXCEEDED',
             `Your ${period === 'daily' ? 'daily' : 'monthly'} AI request allowance is used. The guided demo is still available.`,
             Math.max(1, Math.ceil((value.resetsAt.getTime() - now) / 1000)));
-          const updated = await counters.updateOne({ _id }, { $inc: { used: 1 } }, { session });
+          const updated = await counters.updateOne({ _id }, { $inc: { used: 1 } }, { session, ...operationOptions });
           if (updated.matchedCount !== 1) throw new Error('Generation quota counter unavailable.');
         }
-        await attempts.insertOne({ ownerId, requestId, inputHash, status: 'reserved', createdAt: new Date(now) }, { session });
-      });
+        await attempts.insertOne({ ownerId, requestId, inputHash, status: 'reserved', createdAt: new Date(now) }, { session, ...operationOptions });
+      }, { maxCommitTimeMS: config.mongoTimeoutMs });
     } catch (error) {
       // A racing transaction may encounter the unique request index first.
       if (error.code === 11000) {
-        const existing = await attempts.findOne({ ownerId, requestId });
+        const existing = await attempts.findOne({ ownerId, requestId }, operationOptions);
         if (existing) throw duplicate(existing, inputHash);
       }
       throw error;
@@ -104,7 +105,7 @@ export function createQuotaStore({ db, client, config, clock = Date.now }) {
     for (const field of ['modelId', 'generationId']) {
       if (typeof usage?.[field] === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(usage[field])) safeUsage[field] = usage[field];
     }
-    await attempts.updateOne(reservation, { $set: { status, completedAt: new Date(clock()), ...(Object.keys(safeUsage).length ? { usage: safeUsage } : {}) } });
+    await attempts.updateOne(reservation, { $set: { status, completedAt: new Date(clock()), ...(Object.keys(safeUsage).length ? { usage: safeUsage } : {}) } }, operationOptions);
   }
 
   return { initialize, limits, reserve, complete };

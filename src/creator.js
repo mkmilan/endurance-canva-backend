@@ -23,28 +23,34 @@ export function validSetupToken(token, config, now = Date.now()) {
   return timingSafeEqual(createHash('sha256').update(token).digest(), Buffer.from(config.setupTokenHash, 'hex'));
 }
 
-export async function createCreatorServices(config, { clock = Date.now, client: suppliedClient } = {}) {
-  if (!config.authConfigured) return null;
-  const client = suppliedClient || new MongoClient(config.mongoUri, {
+export function mongoClientOptions(config) {
+  return {
     // One Render process allows two concurrent generations. Five connections
     // leave room for sessions/setup without exhausting a shared Atlas budget.
     maxPoolSize: 5,
     minPoolSize: 0,
-    // Auth/quota operations should fail promptly before the separate model
-    // timeout. This also bounds Mongo transaction retry duration.
+    // Driver 7.8 removed experimental timeoutMS. These supported options bound
+    // individual network/pool phases, not the entire multi-operation request.
     serverSelectionTimeoutMS: config.mongoTimeoutMs,
     connectTimeoutMS: config.mongoTimeoutMs,
-    timeoutMS: config.mongoTimeoutMs,
-  });
+    socketTimeoutMS: config.mongoTimeoutMs,
+    waitQueueTimeoutMS: config.mongoTimeoutMs,
+  };
+}
+
+export async function createCreatorServices(config, { clock = Date.now, client: suppliedClient } = {}) {
+  if (!config.authConfigured) return null;
+  const client = suppliedClient || new MongoClient(config.mongoUri, mongoClientOptions(config));
+  const operationOptions = { maxTimeMS: config.mongoTimeoutMs };
   let healthy = true;
   try {
     await client.connect();
     const db = client.db(config.mongoDatabase);
-    await db.command({ ping: 1 });
+    await db.command({ ping: 1 }, operationOptions);
     // This durable unique constraint closes concurrent setup races. Signup's
     // transaction creates both the user and password credential or neither.
     await db.collection('user').createIndex({ canvasOwner: 1 }, {
-      name: 'canvas_single_owner', unique: true, partialFilterExpression: { canvasOwner: 'owner' },
+      name: 'canvas_single_owner', unique: true, partialFilterExpression: { canvasOwner: 'owner' }, ...operationOptions,
     });
     const quota = createQuotaStore({ db, client, config, clock });
     await quota.initialize();
@@ -74,7 +80,7 @@ export async function createCreatorServices(config, { clock = Date.now, client: 
     // mounted. Only the token-checked setup operation below may invoke signup.
     const bootstrapAuth = betterAuth({ ...commonOptions, emailAndPassword: { ...passwordOptions, autoSignIn: false } });
     const nodeHandler = toNodeHandler(auth);
-    const owner = () => db.collection('user').findOne({ canvasOwner: 'owner' }, { projection: { _id: 1 } });
+    const owner = () => db.collection('user').findOne({ canvasOwner: 'owner' }, { projection: { _id: 1 }, ...operationOptions });
     const setupEnabled = () => Boolean(config.setupTokenHash && config.setupExpiresAt > clock());
 
     async function session(headers) {
@@ -116,12 +122,12 @@ export async function createCreatorServices(config, { clock = Date.now, client: 
       let attempt;
       try {
         attempt = await setupAttempts.findOneAndUpdate(
-          { _id: String(minute) }, { $inc: { count: 1 } }, { upsert: true, returnDocument: 'after' },
+          { _id: String(minute) }, { $inc: { count: 1 } }, { upsert: true, returnDocument: 'after', ...operationOptions },
         );
       } catch (error) {
         if (error.code !== 11000) throw error;
         attempt = await setupAttempts.findOneAndUpdate(
-          { _id: String(minute) }, { $inc: { count: 1 } }, { returnDocument: 'after' },
+          { _id: String(minute) }, { $inc: { count: 1 } }, { returnDocument: 'after', ...operationOptions },
         );
       }
       if (!attempt) throw new Error('Owner setup attempt counter unavailable.');
@@ -130,6 +136,10 @@ export async function createCreatorServices(config, { clock = Date.now, client: 
         await bootstrapAuth.api.signUpEmail({ body: { name: input.name.trim(), email: input.email.trim(), password: input.password } });
       } catch (error) {
         if (await owner()) throw new CreatorError(409, 'SETUP_UNAVAILABLE', 'Owner setup is already complete. Sign in with your creator account.');
+        // Better Auth can translate a concurrent transaction conflict into
+        // FAILED_TO_CREATE_USER before the winner is visible to this read.
+        // Keep setup retryable; do not misreport valid credentials as invalid.
+        if (error.body?.code === 'FAILED_TO_CREATE_USER') throw new CreatorError(409, 'SETUP_RETRY', 'Another setup request may still be finishing. Refresh creator access before trying again.');
         if (error.statusCode >= 400 && error.statusCode < 500) throw new CreatorError(400, 'INVALID_SETUP', 'Owner setup could not be completed. Check your email and password and try again.');
         throw error;
       }

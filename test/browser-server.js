@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
-import { createCreatorServices } from '../src/creator.js';
+import { createCreatorServices, mongoClientOptions } from '../src/creator.js';
 import { generateDemo, example } from '../src/generation.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('The browser fixture cannot run in production.');
@@ -29,7 +29,7 @@ const config = loadConfig({
   AI_MONTHLY_REQUEST_LIMIT: '10',
   GENERATION_MAX_PER_MINUTE: '120',
 });
-const client = new MongoClient(config.mongoUri, { timeoutMS: 8000 });
+const client = new MongoClient(config.mongoUri, mongoClientOptions(config));
 const creator = await createCreatorServices(config, { client });
 const generator = async (input, effectiveConfig) => {
   if (effectiveConfig.mode === 'live') return {

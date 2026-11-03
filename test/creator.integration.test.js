@@ -5,7 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import { loadConfig } from '../src/config.js';
 import { createApp } from '../src/app.js';
-import { createCreatorServices } from '../src/creator.js';
+import { createCreatorServices, mongoClientOptions } from '../src/creator.js';
 import { createQuotaStore, CreatorError } from '../src/quotas.js';
 import { generateDemo } from '../src/generation.js';
 
@@ -26,7 +26,7 @@ async function fixture(t, overrides = {}) {
     AI_MODE: 'live', AI_MODEL_ID: 'test/fixture', AI_GATEWAY_API_KEY: 'fixture-only',
     AI_DAILY_REQUEST_LIMIT: '3', AI_MONTHLY_REQUEST_LIMIT: '10', GENERATION_MAX_PER_MINUTE: '120',
   }), ...overrides.config };
-  const client = new MongoClient(mongoUri, { timeoutMS: 8000 });
+  const client = new MongoClient(mongoUri, mongoClientOptions(config));
   const creator = await createCreatorServices(config, { client });
   let calls = 0;
   const generator = overrides.generator || (async (body) => { calls += 1; return { ...generateDemo(body), usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } }; });
@@ -74,6 +74,8 @@ test('Mongo integration: owner setup, singleton race, session validation and rev
     f.request('/api/v1/creator/setup', { token, ...credentials, email: 'other@example.test' }),
   ]);
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  const loser = await results.find((r) => r.status === 409).json();
+  assert.ok(['SETUP_UNAVAILABLE', 'SETUP_RETRY'].includes(loser.error.code));
   assert.equal(await f.db.collection('user').countDocuments({ canvasOwner: 'owner' }), 1);
   assert.equal(await f.db.collection('account').countDocuments({ providerId: 'credential' }), 1);
   assert.equal(await f.db.collection('session').countDocuments({}), 0, 'setup must not auto sign in');

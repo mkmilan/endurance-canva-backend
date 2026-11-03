@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { MongoClient } from 'mongodb';
 import { loadConfig } from '../src/config.js';
-import { createCreatorServices, validSetupToken, isAllowedAuthRoute, providerConfigured } from '../src/creator.js';
+import { createCreatorServices, validSetupToken, isAllowedAuthRoute, providerConfigured, mongoClientOptions } from '../src/creator.js';
 import { quotaPeriods, generationInputHash } from '../src/quotas.js';
 
 test('owner setup tokens are bounded, hashed and expire at the configured instant', () => {
@@ -31,6 +32,15 @@ test('auth HTTP routes expose only the supported method and exact path', () => {
   assert.equal(isAllowedAuthRoute('/get-session', 'POST'), false);
   assert.equal(isAllowedAuthRoute('/sign-in/email/', 'POST'), false);
   assert.equal(isAllowedAuthRoute('/sign-up/email', 'POST'), false);
+});
+
+test('Mongo driver receives effective phase limits without the removed CSOT option', async () => {
+  const options = mongoClientOptions(loadConfig({ MONGODB_TIMEOUT_MS: '1234' }));
+  assert.equal(Object.hasOwn(options, 'timeoutMS'), false);
+  const client = new MongoClient('mongodb://127.0.0.1:27017', options);
+  for (const name of ['connectTimeoutMS', 'serverSelectionTimeoutMS', 'socketTimeoutMS', 'waitQueueTimeoutMS']) assert.equal(client.options[name], 1234);
+  assert.equal(client.options.maxPoolSize, 5);
+  await client.close();
 });
 
 test('UTC quotas roll over correctly at month/year boundaries and leap day', () => {
